@@ -1,0 +1,5 @@
+model,use_forecast,episodes_evaluated,mean_reward,std_reward,min_reward,max_reward,mean_final_temperature,mean_final_energy,mean_final_predicted_heat,termination_count,checkpoint_path,eval_json_path
+DQN (Forecast Off),False,10,722.240784654104,35.00341427016474,629.8084011044624,759.6000000000006,25.410995348581306,5.4,0.0,0,results/checkpoints/dqn_forecast_off.pth,results/summaries/dqn_eval_forecast_off.json
+DQN (Forecast On),True,10,563.3199999999999,3.543105982044546,555.8,567.9999999999999,24.343346187770496,5.4,-0.3118131756782532,0,results/checkpoints/dqn_forecast_on.pth,results/summaries/dqn_eval_forecast_on.json
+Q-Learning (Forecast Off),False,10,368.3030092417666,376.385876548284,-553.4905826152994,688.9999999999998,24.4912935729146,6.0,,0,results/checkpoints/q_learning_forecast_off.pkl,results/summaries/q_learning_eval_forecast_off.json
+Q-Learning (Forecast On),True,10,-1376.4979822849268,4447.852655767611,-13550.389803905899,682.0256954030685,21.918987235578303,5.7,-0.6185553699731827,0,results/checkpoints/q_learning_forecast_on.pkl,results/summaries/q_learning_eval_forecast_on.json

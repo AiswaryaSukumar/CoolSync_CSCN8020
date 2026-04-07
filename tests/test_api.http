@@ -1,0 +1,9 @@
+POST http://127.0.0.1:5000/api/run-simulation
+Content-Type: application/json
+
+{
+  "prompt_text": "Urgent: debug Python CUDA code for multiple concurrent users",
+  "controller": "dqn",
+  "scenario": "spiky",
+  "use_forecast": true
+}

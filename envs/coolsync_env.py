@@ -1,446 +1,431 @@
 # envs/coolsync_env.py
 
-import numpy as np
+from __future__ import annotations
+
+from collections import deque
+from typing import Deque, Dict, Optional
+
 import gymnasium as gym
+import numpy as np
 from gymnasium import spaces
-from typing import Optional, Dict, Tuple
 
 from configs.default_config import CoolSyncConfig
-from envs.env_data_loader   import EnvDataLoader
+from forecasting.forecast_utils import predict_next_heat_with_fallback
+from prompt_model.prompt_generator import generate_prompt_features
+from prompt_model.prompt_to_heat import prompt_to_workload_and_heat
+from scenarios.scenario_definitions import SCENARIOS
+from utils.energy_model import compute_total_cooling_energy
+from utils.seed import set_global_seed
 
 
 class CoolSyncEnv(gym.Env):
     """
-    CoolSync+ Gymnasium Environment.
+    Prompt-aware predictive cooling environment.
 
-    Simulates a single AI data center rack.
-    Driven by real workload data from stage4 dataset.
-    Optionally uses LSTM forecast as 6th state variable.
+    Final state contract:
+        [
+            current_temperature,
+            current_workload,
+            current_cooling_level,
+            ambient_temperature,
+            previous_action,
+            predicted_heat_next_step,
+        ]
 
-    STATE (5D without forecast / 6D with forecast):
-      [0] current_temperature   - rack temp in degrees C
-      [1] current_workload      - GPU load (0 to 1)
-      [2] current_cooling_level - AC level (0 to 10)
-      [3] ambient_temperature   - room temp in degrees C
-      [4] previous_action       - last action (0, 1, 2)
-      [5] predicted_heat        - LSTM forecast (if enabled)
-
-    ACTIONS (3 discrete):
-      0 = Decrease cooling
-      1 = Maintain cooling
-      2 = Increase cooling
-
-    REWARD:
-      Penalize: energy, overheating, overcooling, instability
-      Reward:   staying in safe temperature zone (18-27 C)
+    Action contract:
+        0 = decrease cooling
+        1 = maintain cooling
+        2 = increase cooling
     """
 
-    metadata = {'render_modes': ['human']}
+    metadata = {"render_modes": ["human"]}
 
     def __init__(
         self,
-        config:          Optional[CoolSyncConfig] = None,
-        data_path:       str  = 'data/stage4_cooling_control_norm.csv',
-        lstm_checkpoint: Optional[str] = None,
-        use_forecast:    bool = True,
-        use_real_data:   bool = True,
-    ):
+        config: Optional[CoolSyncConfig] = None,
+        scenario_name: str = "stable",
+        use_forecast: bool = True,
+        forecast_model=None,
+        forecast_device=None,
+    ) -> None:
         super().__init__()
 
-        self.config        = config or CoolSyncConfig()
-        self.use_forecast  = use_forecast
-        self.use_real_data = use_real_data
+        # Use caller-provided configuration or default project config
+        self.config = config if config is not None else CoolSyncConfig()
 
-        # State dimensions
-        self.state_dim = 6 if use_forecast else 5
+        # Set reproducible seed
+        set_global_seed(self.config.seed)
 
-        # Action space: 3 discrete actions
+        # Validate requested scenario
+        if scenario_name not in SCENARIOS:
+            raise ValueError(f"Unknown scenario_name: {scenario_name}")
+
+        self.scenario_name = scenario_name
+        self.scenario_config = SCENARIOS[scenario_name]
+
+        # Forecast behavior controls whether predicted heat is visible in the state
+        self.use_forecast = use_forecast
+        self.forecast_model = forecast_model
+        self.forecast_device = forecast_device
+
+        # Action space:
+        # 0 = decrease cooling
+        # 1 = maintain
+        # 2 = increase cooling
         self.action_space = spaces.Discrete(3)
 
-        # Observation space
-        if use_forecast:
-            low  = np.array(
-                [0., 0., 0., 0., 0., -5.],
-                dtype=np.float32
-            )
-            high = np.array(
-                [50., 1., 10., 50., 2., 5.],
-                dtype=np.float32
-            )
-        else:
-            low  = np.array(
-                [0., 0., 0., 0., 0.],
-                dtype=np.float32
-            )
-            high = np.array(
-                [50., 1., 10., 50., 2.],
-                dtype=np.float32
-            )
-
+        # Observation space follows the locked 6D contract
         self.observation_space = spaces.Box(
-            low=low, high=high, dtype=np.float32
+            low=np.array(
+                [
+                    0.0,                                   # current_temperature
+                    0.0,                                   # current_workload
+                    self.config.min_cooling_level,         # current_cooling_level
+                    0.0,                                   # ambient_temperature
+                    0.0,                                   # previous_action
+                    self.config.min_heat_load,             # predicted_heat_next_step
+                ],
+                dtype=np.float32,
+            ),
+            high=np.array(
+                [
+                    50.0,                                  # current_temperature
+                    1.0,                                   # current_workload
+                    self.config.max_cooling_level,         # current_cooling_level
+                    50.0,                                  # ambient_temperature
+                    2.0,                                   # previous_action
+                    self.config.max_heat_load,             # predicted_heat_next_step
+                ],
+                dtype=np.float32,
+            ),
+            dtype=np.float32,
         )
 
-        # Load real data
-        if use_real_data:
-            self.data_loader = EnvDataLoader(data_path)
-        else:
-            self.data_loader = None
+        # Internal episode state
+        self.current_step: int = 0
+        self.temperature: float = self.config.initial_temperature
+        self.ambient_temperature: float = self.config.initial_ambient_temp
+        self.cooling_level: int = self.config.initial_cooling_level
+        self.previous_action: int = 1
+        self.current_workload: float = 0.0
+        self.current_heat_load: float = 0.0
+        self.predicted_heat_next_step: float = 0.0
 
-        # Load LSTM predictor if requested
-        self.predictor = None
-        if use_forecast and lstm_checkpoint:
-            from forecasting.predict import HeatPredictor
-            self.predictor = HeatPredictor(lstm_checkpoint)
-
-        # Internal state variables
-        self.current_step    = 0
-        self.temperature     = self.config.initial_temperature
-        self.workload        = self.config.initial_workload
-        self.cooling_level   = self.config.initial_cooling_level
-        self.ambient_temp    = self.config.initial_ambient_temp
-        self.previous_action = 1
-        self.predicted_heat  = 0.0
-        self.history         = []
-        self._feature_buffer = []
-
-    # ─────────────────────────────────────────────
-    # RESET
-    # ─────────────────────────────────────────────
-    def reset(
-        self,
-        *,
-        seed:    Optional[int]  = None,
-        options: Optional[Dict] = None,
-    ):
-        super().reset(seed=seed)
-
-        self.current_step    = 0
-        self.temperature     = float(
-            np.random.uniform(22.0, 25.0)
-        )
-        self.workload        = float(
-            np.random.uniform(0.3, 0.7)
-        )
-        self.cooling_level   = self.config.initial_cooling_level
-        self.ambient_temp    = self.config.initial_ambient_temp
-        self.previous_action = 1
-        self.predicted_heat  = 0.0
-        self.history         = []
-        self._feature_buffer = []
-
-        return self._get_state(), {}
-
-    # ─────────────────────────────────────────────
-    # STEP
-    # ─────────────────────────────────────────────
-    def step(self, action: int):
-        assert self.action_space.contains(action), \
-            f"Invalid action: {action}"
-
-        prev_cooling = self.cooling_level
-
-        # 1. Apply action
-        self._apply_action(action)
-
-        # 2. Update workload
-        self._update_workload()
-
-        # 3. Update ambient temperature
-        self._update_ambient()
-
-        # 4. Update rack temperature via physics
-        self._update_temperature()
-
-        # 5. Update feature buffer and get forecast
-        self._update_feature_buffer()
-        if self.use_forecast and self.predictor:
-            self.predicted_heat = self._get_forecast()
-
-        # 6. Calculate reward
-        reward, info = self._compute_reward(
-            action, prev_cooling
+        # Rolling history used by forecast bridge
+        self.heat_history: Deque[float] = deque(
+            maxlen=self.config.forecast_sequence_length
         )
 
-        # 7. Update state and history
-        self.previous_action = int(action)
-        self.current_step   += 1
+        # Per-step episode history for metrics and plots
+        self.history = []
 
-        self.history.append({
-            'step':           self.current_step,
-            'temperature':    round(self.temperature, 3),
-            'workload':       round(self.workload, 3),
-            'cooling_level':  self.cooling_level,
-            'action':         int(action),
-            'reward':         round(reward, 4),
-            'predicted_heat': round(self.predicted_heat, 4),
-            'is_overheating': info['is_overheating'],
-            'is_overcooling': info['is_overcooling'],
-            'energy':         info['energy'],
-            'ambient_temp':   round(self.ambient_temp, 3),
-        })
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
 
-        # 8. Check termination
-        terminated = (
-            self.config.terminate_on_critical
-            and self.temperature >= self.config.critical_temp
-        )
-        truncated = (
-            self.current_step >= self.config.episode_length
-        )
-
-        return (
-            self._get_state(),
-            reward,
-            terminated,
-            truncated,
-            info,
-        )
-
-    # ─────────────────────────────────────────────
-    # RENDER
-    # ─────────────────────────────────────────────
-    def render(self):
-        status = (
-            'OVERHEATING' if self.temperature > 27
-            else 'OVERCOOLING' if self.temperature < 18
-            else 'SAFE'
-        )
-        print(
-            f"Step={self.current_step:3d} | "
-            f"Temp={self.temperature:5.2f}C | "
-            f"Workload={self.workload:.2f} | "
-            f"Cooling={self.cooling_level:2d} | "
-            f"Forecast={self.predicted_heat:+.3f} | "
-            f"Status={status}"
-        )
-
-    # ─────────────────────────────────────────────
-    # PRIVATE: get state
-    # ─────────────────────────────────────────────
     def _get_state(self) -> np.ndarray:
-        state = [
-            self.temperature,
-            self.workload,
-            float(self.cooling_level),
-            self.ambient_temp,
-            float(self.previous_action),
-        ]
-        if self.use_forecast:
-            state.append(self.predicted_heat)
-        return np.array(state, dtype=np.float32)
+        """
+        Return the current state in the locked order.
+        """
+        forecast_value = self.predicted_heat_next_step if self.use_forecast else 0.0
 
-    # ─────────────────────────────────────────────
-    # PRIVATE: apply action
-    # ─────────────────────────────────────────────
-    def _apply_action(self, action: int):
+        return np.array(
+            [
+                self.temperature,
+                self.current_workload,
+                self.cooling_level,
+                self.ambient_temperature,
+                self.previous_action,
+                forecast_value,
+            ],
+            dtype=np.float32,
+        )
+
+    def _sample_prompt_event(self) -> Dict:
+        """
+        Generate one structured prompt event and convert it to workload + heat.
+        """
+        prompt_features = generate_prompt_features(
+            config=self.config,
+            prompt_type_probabilities=self.scenario_config["prompt_type_probabilities"],
+        )
+
+        prompt_event = prompt_to_workload_and_heat(
+            prompt_features=prompt_features,
+            config=self.config,
+        )
+
+        return prompt_event
+
+    def _update_ambient_temperature(self) -> None:
+        """
+        Update ambient temperature according to the active scenario.
+        """
+        ambient_mode = self.scenario_config["ambient_mode"]
+        ambient_noise_std = self.scenario_config["ambient_noise_std"]
+
+        if ambient_mode == "stable":
+            self.ambient_temperature += np.random.normal(0.0, ambient_noise_std)
+
+        elif ambient_mode == "sinusoidal":
+            sinusoidal_shift = 0.15 * np.sin(2 * np.pi * self.current_step / 40.0)
+            self.ambient_temperature += (
+                sinusoidal_shift + np.random.normal(0.0, ambient_noise_std)
+            )
+
+        elif ambient_mode == "warm_drift":
+            self.ambient_temperature += (
+                0.03 + np.random.normal(0.0, ambient_noise_std)
+            )
+
+        else:
+            self.ambient_temperature += np.random.normal(0.0, ambient_noise_std)
+
+        self.ambient_temperature = float(
+            np.clip(
+                self.ambient_temperature,
+                self.config.ambient_temp_min,
+                self.config.ambient_temp_max,
+            )
+        )
+
+    def _predict_next_heat(self) -> float:
+        """
+        Predict next-step heat using rolling recent heat history.
+
+        If a trained model is unavailable, use a safe fallback.
+        """
+        recent_heat_history = list(self.heat_history)
+
+        predicted_heat = predict_next_heat_with_fallback(
+            recent_heat_history=recent_heat_history,
+            sequence_length=self.config.forecast_sequence_length,
+            forecast_model=self.forecast_model,
+            device=self.forecast_device,
+            fallback_value=self.current_heat_load,
+        )
+
+        return float(
+            np.clip(
+                predicted_heat,
+                self.config.min_heat_load,
+                self.config.max_heat_load,
+            )
+        )
+
+    def _apply_action(self, action: int) -> None:
+        """
+        Apply delta-action cooling control.
+        """
+        if not self.action_space.contains(action):
+            raise ValueError(f"Invalid action: {action}")
+
         if action == 0:
             self.cooling_level -= 1
         elif action == 2:
             self.cooling_level += 1
 
-        self.cooling_level = int(np.clip(
-            self.cooling_level,
-            self.config.min_cooling_level,
-            self.config.max_cooling_level,
-        ))
-
-    # ─────────────────────────────────────────────
-    # PRIVATE: update workload
-    # ─────────────────────────────────────────────
-    def _update_workload(self):
-        if self.use_real_data and self.data_loader:
-            self.workload = self.data_loader.get_workload(
-                self.current_step
+        self.cooling_level = int(
+            np.clip(
+                self.cooling_level,
+                self.config.min_cooling_level,
+                self.config.max_cooling_level,
             )
-        else:
-            t = self.current_step
-            spike = 0.4 if np.random.random() < 0.05 else 0.0
-            self.workload = float(np.clip(
-                0.5 + 0.3 * np.sin(2 * np.pi * t / 40)
-                + spike
-                + np.random.normal(0, 0.05),
-                0.0, 1.0
-            ))
+        )
 
-    # ─────────────────────────────────────────────
-    # PRIVATE: update ambient temperature
-    # ─────────────────────────────────────────────
-    def _update_ambient(self):
-        offset = 0.0
-        if self.use_real_data and self.data_loader:
-            offset = self.data_loader.get_ambient_offset(
-                self.current_step
-            )
-
-        self.ambient_temp = float(np.clip(
-            self.ambient_temp
-            + np.random.normal(0, 0.05)
-            + offset * 0.1,
-            self.config.ambient_temp_min,
-            self.config.ambient_temp_max,
-        ))
-
-    # ─────────────────────────────────────────────
-    # PRIVATE: temperature physics equation
-    # ─────────────────────────────────────────────
-    def _update_temperature(self):
+    def _update_temperature(self) -> None:
         """
-        Core thermal equation:
+        Update rack temperature using the thermal transition equation.
+
         T(t+1) = T(t)
-               + alpha x workload
-               - beta  x cooling_fraction
-               + ambient_effect
-               + noise
+                 + alpha_heat * current_heat_load
+                 - beta_cooling * cooling_effect
+                 + ambient_coupling * (ambient_temperature - T)
+                 + noise
         """
-        noise          = np.random.normal(
-            0, self.config.noise_std
+        cooling_effect = self.cooling_level / max(1, self.config.max_cooling_level)
+
+        ambient_effect = self.config.ambient_coupling * (
+            self.ambient_temperature - self.temperature
         )
-        cooling_frac   = (
-            self.cooling_level /
-            self.config.max_cooling_level
-        )
-        ambient_effect = 0.05 * (
-            self.ambient_temp - self.temperature
+
+        thermal_noise_scale = self.scenario_config["thermal_noise_scale"]
+        thermal_noise = np.random.normal(
+            0.0,
+            self.config.thermal_noise_std * thermal_noise_scale,
         )
 
         self.temperature = float(
             self.temperature
-            + self.config.alpha * self.workload
-            - self.config.beta  * cooling_frac
+            + self.config.alpha_heat * self.current_heat_load
+            - self.config.beta_cooling * cooling_effect
             + ambient_effect
-            + noise
+            + thermal_noise
         )
 
-    # ─────────────────────────────────────────────
-    # PRIVATE: build LSTM feature buffer
-    # ─────────────────────────────────────────────
-    def _update_feature_buffer(self):
+    def _compute_reward(self, previous_cooling_level: int) -> tuple[float, Dict]:
         """
-        Build feature vector approximating
-        the 10 features the LSTM was trained on.
-
-        T_out approximated from current temperature.
-        T_celCC approximated from cooling effect.
-        Time features calculated from timestep.
-
-        Note: This is an approximation.
-        Real deployment would use actual sensors.
+        Compute reward using:
+        - cooling energy usage penalty
+        - overheating penalty
+        - overcooling penalty
+        - instability penalty
+        - safe-zone bonus
         """
-        cfg          = self.config
-        temp         = self.temperature
-        cool_effect  = (
-            self.cooling_level / cfg.max_cooling_level
-        ) * 2.0
-
-        # Normalize temperature to z-score scale
-        # Training data had mean~0, std~1
-        # Environment temp range: 18-35C, center ~24C
-        temp_z = (temp - 24.0) / 3.0
-
-        # Approximate outlet sensor readings
-        t_out_0 = temp_z + 0.20
-        t_out_1 = temp_z + 0.15
-        t_out_2 = temp_z + 0.10
-        t_out_3 = temp_z + 0.05
-
-        # Approximate cooling cell readings
-        t_cel_0 = temp_z - cool_effect
-        t_cel_1 = temp_z - cool_effect - 0.05
-        t_cel_2 = temp_z - cool_effect - 0.10
-        t_cel_3 = temp_z - cool_effect - 0.15
-
-        # Time features
-        steps_per_day = (24 * 60) / cfg.time_delta_minutes
-        frac_of_day   = (
-            self.current_step % steps_per_day
-        ) / steps_per_day
-
-        hour_sin = float(np.sin(2 * np.pi * frac_of_day))
-        hour_cos = float(np.cos(2 * np.pi * frac_of_day))
-
-        features = [
-            t_out_0, t_out_1, t_out_2, t_out_3,
-            t_cel_0, t_cel_1, t_cel_2, t_cel_3,
-            hour_sin, hour_cos,
-        ]
-
-        self._feature_buffer.append(features)
-
-        # Keep only last 8 steps
-        if len(self._feature_buffer) > 8:
-            self._feature_buffer.pop(0)
-
-    # ─────────────────────────────────────────────
-    # PRIVATE: get LSTM forecast
-    # ─────────────────────────────────────────────
-    def _get_forecast(self) -> float:
-        """
-        Ask LSTM to predict next thermal load.
-        Returns 0.0 if not enough history yet.
-        """
-        if len(self._feature_buffer) < 8:
-            return 0.0
-
-        history = np.array(
-            self._feature_buffer,
-            dtype=np.float32
+        energy = compute_total_cooling_energy(
+            cooling_level=self.cooling_level,
+            ambient_temperature=self.ambient_temperature,
+            config=self.config,
         )
-        return self.predictor.predict(history)
 
-    # ─────────────────────────────────────────────
-    # PRIVATE: compute reward
-    # ─────────────────────────────────────────────
-    def _compute_reward(
-        self,
-        action:      int,
-        prev_cooling: int,
-    ) -> Tuple[float, Dict]:
-        """
-        Reward function priority order:
-          1st: Overheating penalty  (w=10.0) - safety
-          2nd: Safe zone bonus      (w=5.0)  - ideal target
-          3rd: Overcooling penalty  (w=2.0)  - waste
-          4th: Instability penalty  (w=1.0)  - wear
-          5th: Energy penalty       (w=0.2)  - efficiency
-        """
-        cfg = self.config
+        overheat_amount = max(0.0, self.temperature - self.config.safe_temp_max)
+        overcool_amount = max(0.0, self.config.safe_temp_min - self.temperature)
+        instability = abs(self.cooling_level - previous_cooling_level)
 
-        overheat    = max(
-            0.0, self.temperature - cfg.safe_temp_max
+        safe_zone_bonus = (
+            1.0
+            if self.config.safe_temp_min <= self.temperature <= self.config.safe_temp_max
+            else 0.0
         )
-        overcool    = max(
-            0.0, cfg.safe_temp_min - self.temperature
-        )
-        instability = abs(self.cooling_level - prev_cooling)
-        energy      = float(self.cooling_level)
-
-        in_safe    = (
-            cfg.safe_temp_min
-            <= self.temperature
-            <= cfg.safe_temp_max
-        )
-        safe_bonus = cfg.w_safe_bonus if in_safe else 0.0
 
         reward = (
-            - cfg.w_energy      * energy
-            - cfg.w_overheat    * (overheat ** 2)
-            - cfg.w_overcool    * (overcool ** 2)
-            - cfg.w_instability * instability
-            + safe_bonus
+            - self.config.w_energy * energy
+            - self.config.w_overheat * (overheat_amount ** 2)
+            - self.config.w_overcool * (overcool_amount ** 2)
+            - self.config.w_instability * instability
+            + self.config.w_safe_bonus * safe_zone_bonus
         )
 
         info = {
-            'temperature':     self.temperature,
-            'overheat_amount': overheat,
-            'overcool_amount': overcool,
-            'energy':          energy,
-            'instability':     instability,
-            'safe_bonus':      safe_bonus,
-            'is_overheating':  int(overheat > 0),
-            'is_overcooling':  int(overcool > 0),
-            'cooling_level':   self.cooling_level,
-            'predicted_heat':  self.predicted_heat,
+            "energy": float(energy),
+            "temperature": float(self.temperature),
+            "ambient_temperature": float(self.ambient_temperature),
+            "workload": float(self.current_workload),
+            "heat_load": float(self.current_heat_load),
+            "predicted_heat_next_step": float(self.predicted_heat_next_step),
+            "cooling_level": int(self.cooling_level),
+            "overheat_amount": float(overheat_amount),
+            "overcool_amount": float(overcool_amount),
+            "instability": float(instability),
+            "safe_zone_bonus": float(safe_zone_bonus),
+            "is_overheating": int(overheat_amount > 0.0),
+            "is_overcooling": int(overcool_amount > 0.0),
         }
 
         return float(reward), info
+
+    # ------------------------------------------------------------------
+    # Gymnasium API
+    # ------------------------------------------------------------------
+
+    def reset(self, *, seed: Optional[int] = None, options: Optional[Dict] = None):
+        """
+        Reset the environment to its initial state.
+        """
+        super().reset(seed=seed)
+
+        if seed is not None:
+            set_global_seed(seed)
+
+        self.current_step = 0
+        self.temperature = self.config.initial_temperature
+        self.ambient_temperature = self.config.initial_ambient_temp
+        self.cooling_level = self.config.initial_cooling_level
+        self.previous_action = 1
+        self.current_workload = 0.0
+        self.current_heat_load = 0.0
+        self.predicted_heat_next_step = 0.0
+        self.history = []
+
+        # Initialize heat history with zeros so forecast window is valid
+        self.heat_history = deque(
+            [0.0] * self.config.forecast_sequence_length,
+            maxlen=self.config.forecast_sequence_length,
+        )
+
+        return self._get_state(), {}
+
+    def step(self, action: int):
+        """
+        Execute one environment step.
+        """
+        if not self.action_space.contains(action):
+            raise ValueError(f"Invalid action: {action}")
+
+        previous_cooling_level = self.cooling_level
+
+        # 1. Apply action
+        self._apply_action(action)
+
+        # 2. Advance simulation clock
+        self.current_step += 1
+
+        # 3. Update ambient conditions
+        self._update_ambient_temperature()
+
+        # 4. Generate prompt-driven workload and heat
+        prompt_event = self._sample_prompt_event()
+        self.current_workload = float(prompt_event["workload"])
+        self.current_heat_load = float(prompt_event["heat_load"])
+
+        # 5. Update heat history and forecast next-step heat
+        self.heat_history.append(self.current_heat_load)
+        self.predicted_heat_next_step = self._predict_next_heat()
+
+        # 6. Update thermal state
+        self._update_temperature()
+
+        # 7. Compute reward and diagnostics
+        reward, info = self._compute_reward(
+            previous_cooling_level=previous_cooling_level
+        )
+
+        # 8. Track action
+        self.previous_action = int(action)
+
+        # 9. Stopping conditions
+        terminated = (
+            self.config.terminate_on_critical
+            and self.temperature >= self.config.critical_temp
+        )
+        truncated = self.current_step >= self.config.episode_length
+
+        # 10. Store history for metrics / plots / comparisons
+        self.history.append(
+            {
+                "step": int(self.current_step),
+                "action": int(action),
+                "reward": float(reward),
+                "temperature": float(self.temperature),
+                "ambient_temperature": float(self.ambient_temperature),
+                "workload": float(self.current_workload),
+                "heat_load": float(self.current_heat_load),
+                "predicted_heat_next_step": float(self.predicted_heat_next_step),
+                "cooling_level": int(self.cooling_level),
+                "energy": float(info["energy"]),
+                "is_overheating": int(info["is_overheating"]),
+                "is_overcooling": int(info["is_overcooling"]),
+            }
+        )
+
+        return self._get_state(), reward, terminated, truncated, info
+
+    def render(self):
+        """
+        Lightweight text render for debugging.
+        """
+        print(
+            f"Step={self.current_step} | "
+            f"Temp={self.temperature:.2f}°C | "
+            f"Workload={self.current_workload:.2f} | "
+            f"Heat={self.current_heat_load:.2f} | "
+            f"PredHeat={self.predicted_heat_next_step:.2f} | "
+            f"Cooling={self.cooling_level} | "
+            f"Ambient={self.ambient_temperature:.2f}°C"
+        )
+
+    def close(self):
+        """
+        Placeholder for environment cleanup.
+        """
+        pass
