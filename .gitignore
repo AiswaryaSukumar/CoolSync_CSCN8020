@@ -1,0 +1,13 @@
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+results/checkpoints/*.pth
+results/checkpoints/*.pkl
+results/logs/
+results/summaries/
+results/comparisons/
+
+data/generated/
+data/processed/

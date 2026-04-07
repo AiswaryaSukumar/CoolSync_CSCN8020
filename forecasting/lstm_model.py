@@ -1,92 +1,85 @@
 # forecasting/lstm_model.py
 
+from __future__ import annotations
+
 import torch
 import torch.nn as nn
 
 
-class ThermalLSTM(nn.Module):
+class HeatLSTM(nn.Module):
     """
-    LSTM network for predicting future thermal load
-    from historical token volume and GPU metrics.
+    LSTM model for one-step heat forecasting.
 
-    Input  : (batch, lookback=8, features=6)
-    Output : (batch,) predicted TLHC value
+    Expected input shape:
+        (batch_size, sequence_length, input_dim)
+
+    Expected output shape:
+        (batch_size, 1)
+
+    Default design:
+    - input_dim = 1 because the dataset uses a 1D heat history sequence
+    - output predicts next-step heat
     """
 
     def __init__(
         self,
-        input_size:  int   = 6,
-        hidden_size: int   = 64,
-        num_layers:  int   = 2,
-        dropout:     float = 0.2,
-    ):
-        """
-        input_size  : number of input features (6)
-        hidden_size : number of LSTM memory units (64)
-        num_layers  : number of stacked LSTM layers (2)
-        dropout     : fraction of neurons to randomly zero (0.2)
-        """
+        input_dim: int = 1,
+        hidden_dim: int = 32,
+        num_layers: int = 1,
+        dropout: float = 0.0,
+    ) -> None:
         super().__init__()
 
-        self.hidden_size = hidden_size
-        self.num_layers  = num_layers
+        self.input_dim = input_dim
+        self.hidden_dim = hidden_dim
+        self.num_layers = num_layers
+        self.dropout_rate = dropout
 
-        # LSTM processes the sequence of feature vectors
-        # batch_first=True means input shape is
-        # (batch, sequence, features)
+        # LSTM backbone for sequence modeling
         self.lstm = nn.LSTM(
-            input_size  = input_size,
-            hidden_size = hidden_size,
-            num_layers  = num_layers,
-            batch_first = True,
-            dropout     = dropout if num_layers > 1 else 0.0,
+            input_size=input_dim,
+            hidden_size=hidden_dim,
+            num_layers=num_layers,
+            batch_first=True,
+            dropout=dropout if num_layers > 1 else 0.0,
         )
 
-        # Dropout layer for regularization
+        # Optional dropout before final regression
         self.dropout = nn.Dropout(dropout)
 
-        # Final layer maps 64 LSTM outputs to 1 prediction
-        self.fc = nn.Linear(hidden_size, 1)
+        # Final regression layer predicting one next-step heat value
+        self.output_layer = nn.Linear(hidden_dim, 1)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
-        Forward pass through the network.
+        Forward pass.
 
-        x shape : (batch, lookback, input_size)
+        Args:
+            x: Tensor of shape (batch_size, sequence_length, input_dim)
 
-        Process:
-            1. LSTM processes all 8 timesteps
-            2. Take output from final timestep only
-               because it has seen all previous steps
-            3. Apply dropout
-            4. Pass through fully connected layer
-            5. Return single prediction value
+        Returns:
+            Tensor of shape (batch_size, 1)
         """
-        # lstm_out shape: (batch, lookback, hidden_size)
-        lstm_out, _ = self.lstm(x)
+        # LSTM output shape: (batch_size, sequence_length, hidden_dim)
+        lstm_output, _ = self.lstm(x)
 
-        # Take only the last timestep output
-        # shape: (batch, hidden_size)
-        last_step = lstm_out[:, -1, :]
+        # Take representation from final timestep
+        final_timestep_output = lstm_output[:, -1, :]
 
-        # Apply dropout
-        last_step = self.dropout(last_step)
+        # Apply dropout before regression head
+        final_timestep_output = self.dropout(final_timestep_output)
 
-        # Predict thermal load
-        # shape: (batch, 1)
-        output = self.fc(last_step)
+        # Predict next-step heat
+        prediction = self.output_layer(final_timestep_output)
 
-        # Remove last dimension
-        # shape: (batch,)
-        return output.squeeze(-1)
+        return prediction
 
     def count_parameters(self) -> int:
         """
-        Returns total number of trainable parameters.
-        Useful to report model complexity.
+        Return total number of trainable parameters.
         """
         return sum(
-            p.numel()
-            for p in self.parameters()
-            if p.requires_grad
+            parameter.numel()
+            for parameter in self.parameters()
+            if parameter.requires_grad
         )
