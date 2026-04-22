@@ -1,0 +1,31 @@
+{
+  "scenario_name": "Steady Load",
+  "description": "30-minute uniform workload — low variance Short queries at low user counts; tests baseline efficiency gap",
+  "total_minutes": 30,
+  "events": [
+    {
+      "time_min": 3,
+      "prompt": "What is 2 + 2?",
+      "users": 2,
+      "note": "Trivial queries"
+    },
+    {
+      "time_min": 10,
+      "prompt": "Translate this sentence to French",
+      "users": 2,
+      "note": "Short translation"
+    },
+    {
+      "time_min": 17,
+      "prompt": "What is the capital of Canada?",
+      "users": 2,
+      "note": "Factual lookup"
+    },
+    {
+      "time_min": 24,
+      "prompt": "Give me a one-line Python hello world",
+      "users": 2,
+      "note": "Short code"
+    }
+  ]
+}

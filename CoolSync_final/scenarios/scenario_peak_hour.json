@@ -1,0 +1,28 @@
+{
+  "scenario_name": "Realistic LLM Datacenter Traffic",
+  "description": "3 non-overlapping bursts with irregular gaps. 4 concurrent users per event — each burst pushes 27–30 kW, forcing PID into fan saturation while DQN pre-cools via LSTM. Dead-time θ=3 min creates ~3-4°C overshoot visible in PID but suppressed by DQN.",
+  "total_minutes": 60,
+  "events": [
+    {
+      "time_min": 5,
+      "prompt": "Explain the difference between supervised and unsupervised learning with examples",
+      "users": 4,
+      "force_class": 1,
+      "note": "Medium ×4 — 32 kW burst"
+    },
+    {
+      "time_min": 22,
+      "prompt": "Write a Python REST API with authentication, error handling, and unit tests",
+      "users": 4,
+      "force_class": 2,
+      "note": "Long ×4 — 28 kW sustained"
+    },
+    {
+      "time_min": 47,
+      "prompt": "Summarize the key differences between transformer and RNN architectures",
+      "users": 4,
+      "force_class": 1,
+      "note": "Medium ×4 — 32 kW burst"
+    }
+  ]
+}

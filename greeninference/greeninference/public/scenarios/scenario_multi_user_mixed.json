@@ -1,0 +1,109 @@
+{
+  "scenario_name": "Multi-User Mixed Prompt Load Test",
+  "description": "5 time slots over 120 minutes. Each slot has multiple concurrent users submitting different prompt types simultaneously — heat is accumulated (summed) across overlapping events, capped at Q_RACK_MAX. Designed to show how the system predicts aggregate thermal load from mixed workloads.",
+  "total_minutes": 120,
+  "events": [
+    {
+      "time_min": 10,
+      "prompt": "What is the capital of France?",
+      "users": 2,
+      "force_class": 0,
+      "note": "Slot1 Short ×2"
+    },
+    {
+      "time_min": 10,
+      "prompt": "Explain the difference between supervised and unsupervised learning with examples",
+      "users": 2,
+      "force_class": 1,
+      "note": "Slot1 Medium ×2"
+    },
+    {
+      "time_min": 10,
+      "prompt": "Describe the transformer attention mechanism in detail",
+      "users": 2,
+      "force_class": 2,
+      "note": "Slot1 Long ×2"
+    },
+
+    {
+      "time_min": 38,
+      "prompt": "Define neural network in one sentence",
+      "users": 1,
+      "force_class": 0,
+      "note": "Slot2 Short ×1"
+    },
+    {
+      "time_min": 38,
+      "prompt": "Compare LSTM and GRU architectures for sequence modeling",
+      "users": 3,
+      "force_class": 1,
+      "note": "Slot2 Medium ×3"
+    },
+    {
+      "time_min": 38,
+      "prompt": "Write a full Python REST API with JWT authentication, rate limiting, and unit tests",
+      "users": 2,
+      "force_class": 2,
+      "note": "Slot2 Long ×2"
+    },
+
+    {
+      "time_min": 65,
+      "prompt": "What year was Python created?",
+      "users": 2,
+      "force_class": 0,
+      "note": "Slot3 Short ×2"
+    },
+    {
+      "time_min": 65,
+      "prompt": "Explain convolutional neural networks with real-world applications",
+      "users": 1,
+      "force_class": 1,
+      "note": "Slot3 Medium ×1"
+    },
+    {
+      "time_min": 65,
+      "prompt": "Perform a thorough architectural review of a microservices system handling 10M daily users: analyze service decomposition, inter-service communication, data consistency, observability, disaster recovery, capacity planning, security threat modeling, and provide a phased migration roadmap",
+      "users": 3,
+      "force_class": 3,
+      "note": "Slot3 VeryLong ×3"
+    },
+
+    {
+      "time_min": 90,
+      "prompt": "Summarize transformers vs RNNs focusing on attention and long-range dependencies",
+      "users": 3,
+      "force_class": 1,
+      "note": "Slot4 Medium ×3"
+    },
+    {
+      "time_min": 90,
+      "prompt": "Write a complete technical design document for a distributed caching system with Redis, including consistency guarantees, eviction policies, cluster topology, failover, and benchmarking methodology",
+      "users": 3,
+      "force_class": 2,
+      "note": "Slot4 Long ×3"
+    },
+
+    {
+      "time_min": 108,
+      "prompt": "List three popular programming languages",
+      "users": 2,
+      "force_class": 0,
+      "note": "Slot5 Short ×2"
+    },
+    {
+      "time_min": 108,
+      "prompt": "Explain reinforcement learning with a datacenter cooling example",
+      "users": 2,
+      "force_class": 1,
+      "note": "Slot5 Medium ×2"
+    },
+    {
+      "time_min": 108,
+      "prompt": "Write a comprehensive energy efficiency analysis for AI datacenters covering PUE, cooling strategies, hardware utilization, workload scheduling, and carbon footprint reduction with quantitative targets",
+      "users": 2,
+      "force_class": 3,
+      "note": "Slot5 VeryLong ×2"
+    }
+  ]
+}

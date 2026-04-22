@@ -1,0 +1,11 @@
+time_min,prompt,users
+5,"What is the capital of France?",2
+10,"Explain the difference between supervised and unsupervised learning with examples",3
+20,"Write a full Python REST API with JWT authentication, rate limiting, and unit tests",2
+35,"Define neural network in one sentence",1
+40,"Summarize transformers vs RNNs focusing on attention and long-range dependencies",3
+55,"Perform a thorough architectural review of a microservices system handling 10M daily users: analyze service decomposition, inter-service communication, data consistency, observability, disaster recovery, capacity planning, security threat modeling, and provide a phased migration roadmap",2
+70,"List three popular programming languages",2
+75,"Explain reinforcement learning with a datacenter cooling example",2
+85,"Write a comprehensive energy efficiency analysis for AI datacenters covering PUE, cooling strategies, hardware utilization, workload scheduling, and carbon footprint reduction with quantitative targets",3
+100,"What year was Python created?",1

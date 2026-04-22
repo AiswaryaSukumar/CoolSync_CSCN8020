@@ -1,0 +1,39 @@
+{
+  "scenario_name": "Stress Test",
+  "description": "45-minute worst-case — overlapping VeryLong queries stress DQN headroom; PID expected to breach ASHRAE",
+  "total_minutes": 45,
+  "events": [
+    {
+      "time_min": 5,
+      "prompt": "Write a full research paper on transformer architectures",
+      "users": 2,
+      "force_class": 3,
+      "note": "Heavy burst #1"
+    },
+    {
+      "time_min": 12,
+      "prompt": "Generate a comprehensive business plan",
+      "users": 2,
+      "force_class": 3,
+      "note": "Overlapping burst #2"
+    },
+    {
+      "time_min": 22,
+      "prompt": "What time is it?",
+      "users": 5,
+      "note": "High-concurrency short"
+    },
+    {
+      "time_min": 30,
+      "prompt": "Explain LSTM networks in detail with code examples",
+      "users": 3,
+      "note": "Recovery burst"
+    },
+    {
+      "time_min": 38,
+      "prompt": "Summarize this paragraph briefly",
+      "users": 4,
+      "note": "Final surge"
+    }
+  ]
+}

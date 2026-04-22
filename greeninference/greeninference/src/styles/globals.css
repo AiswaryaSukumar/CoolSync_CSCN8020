@@ -1,0 +1,194 @@
+/* src/styles/globals.css */
+
+html {
+  min-height: 100%;
+  background: var(--color-bg-app);
+  background-color: var(--color-bg-app);
+  background-image: none;
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+  background: linear-gradient(180deg, var(--color-bg-app) 0%, var(--color-bg-app-alt) 100%);
+  background-color: var(--color-bg-app);
+  background-image: none;
+  color: var(--color-text-body);
+  font-family: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  font-size: var(--font-body-size);
+  line-height: var(--line-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  overflow-x: hidden;
+  background: linear-gradient(180deg, var(--color-bg-app) 0%, var(--color-bg-app-alt) 100%);
+  background-color: var(--color-bg-app);
+  background-image: none;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+::selection {
+  background: rgba(139, 195, 74, 0.22);
+  color: var(--color-text-strong);
+}
+
+h1,
+h2,
+h3,
+h4,
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+button,
+input,
+select,
+textarea {
+  transition:
+    border-color var(--motion-base) ease,
+    background-color var(--motion-base) ease,
+    box-shadow var(--motion-base) ease,
+    color var(--motion-base) ease,
+    transform var(--motion-fast) ease;
+}
+
+input,
+select,
+textarea {
+  min-height: 44px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border-default);
+  background: var(--color-surface-card);
+  color: var(--color-text-strong);
+  padding: 0 var(--space-4);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+textarea {
+  min-height: 140px;
+  padding: var(--space-4);
+  resize: vertical;
+}
+
+input:focus,
+select:focus,
+textarea:focus {
+  outline: none;
+  border-color: rgba(139, 195, 74, 0.38);
+  box-shadow:
+    0 0 0 4px rgba(139, 195, 74, 0.12),
+    inset 0 1px 0 rgba(255, 255, 255, 0.72);
+}
+
+.app-shell {
+  position: relative;
+  min-height: 100vh;
+  isolation: isolate;
+  overflow-x: hidden;
+  background: linear-gradient(180deg, var(--color-bg-app) 0%, var(--color-bg-app-alt) 100%);
+  background-color: var(--color-bg-app);
+  background-image: none;
+  color: var(--color-text-body);
+  contain: paint;
+}
+
+.app-shell::before {
+  content: none;
+}
+
+.app-main {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  width: 100%;
+  margin: 0;
+  padding:
+    calc(72px + var(--space-6))
+    0
+    var(--space-16);
+}
+
+.app-container {
+  max-width: var(--layout-max);
+  margin: 0 auto;
+  padding: 0 var(--layout-gutter);
+  width: 100%;
+}
+
+.app-container > * + * {
+  margin-top: var(--section-stack-gap);
+}
+
+.app-footer {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  margin-top: var(--space-6);
+  border-top: 1px solid var(--color-border-soft);
+  background: rgba(247, 250, 247, 0.84);
+  background-color: rgba(247, 250, 247, 0.96);
+  backdrop-filter: blur(12px);
+}
+
+.app-footer__inner {
+  width: min(100%, var(--layout-max));
+  margin: 0 auto;
+  padding: var(--space-8) var(--layout-gutter);
+  color: var(--color-text-muted);
+  font-size: var(--font-body-sm-size);
+}
+
+.recharts-cartesian-axis-tick text {
+  fill: #27394b;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.recharts-cartesian-axis-tick-line {
+  stroke: rgba(95, 104, 96, 0.24);
+}
+
+.recharts-cartesian-axis-line {
+  stroke: rgba(95, 104, 96, 0.36);
+  stroke-width: 1.15;
+}
+
+.recharts-legend-item-text {
+  color: var(--color-text-body) !important;
+}
+
+.recharts-cartesian-grid line {
+  stroke: rgba(95, 104, 96, 0.16);
+}
+
+.recharts-reference-line line,
+.recharts-reference-area-rect {
+  opacity: 0.9;
+}
+
+.recharts-tooltip-wrapper {
+  outline: none;
+  z-index: 3;
+  pointer-events: none;
+}
