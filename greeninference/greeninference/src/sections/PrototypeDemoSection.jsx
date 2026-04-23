@@ -342,7 +342,7 @@ export default function PrototypeDemoSection() {
   const valueTypeLabel = useTelemetry ? "Observed" : "Estimated";
   const valueTypeMeta = useTelemetry
     ? "Observed telemetry view"
-    : "Published benchmark + model estimate";
+    : "Modeled";
   const topConfidenceLabel = useTelemetry
     ? "Model confidence: Higher (telemetry-adjusted)"
     : "Model confidence: Medium (simulation-based)";
@@ -966,8 +966,8 @@ const carbonCardLabel = useTelemetry
   : "Estimated carbon impact";
 
 const carbonCardHint = useTelemetry
-  ? "Observed telemetry trace; strategy savings are shown in the comparison below"
-  : "Modeled per-request carbon under the selected strategy";
+  ? "Observed telemetry"
+  : "Per request";
 
   const activePreset =
     SCENARIO_PRESETS.find((preset) => preset.id === scenarioPresetId) ?? null;
@@ -1001,18 +1001,18 @@ const carbonCardHint = useTelemetry
   );
 
   const consoleSummaryItems = [
-    { label: "Estimated tokens", value: `${tokens}`, meta: "Modeled workload estimate" },
-    { label: "Complexity", value: complexity, meta: "Modeled prompt class" },
-    { label: "Strategy", value: STRATEGY_LABEL[strategy], meta: "Decision policy view" },
+    { label: "Estimated tokens", value: `${tokens}`, meta: "Modeled" },
+    { label: "Complexity", value: complexity, meta: "Prompt class" },
+    { label: "Strategy", value: STRATEGY_LABEL[strategy], meta: "Policy" },
     {
       label: "Trace source",
       value: TRACE_SOURCE_LABEL[traceSource],
       meta: useTelemetry ? "Observed telemetry active" : "Simulation active",
     },
     {
-      label: "Estimated cooling gap",
+      label: "Cooling overhead gap",
       value: `${(predictedOverheadDelta * 100).toFixed(0)} pp`,
-      meta: "Published benchmark + model estimate",
+      meta: "Modeled",
     },
   ];
 
@@ -1315,25 +1315,25 @@ const carbonCardHint = useTelemetry
     <Section
       id="demo"
       eyebrow="Simulation"
-      title="Simulation"
-      subtitle="How cooling timing changes estimated energy and carbon impact"
+      title="Decision Console"
+      subtitle="Compare cooling timing, energy, and carbon impact"
     >
       <div className="simulation-disclaimer mb-4 rounded-[18px] border border-[rgba(120,140,120,0.2)] bg-[rgba(240,244,240,0.8)] px-4 py-3 text-[13px] text-[#2F3B2F] shadow-[0_8px_18px_rgba(56,96,68,0.04)]">
         <p>
-          This simulation combines:
+          Decision model uses:
           <span className="ml-2 inline-flex items-center rounded-full border border-[#C9DCCB] bg-[#EEF5EF] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#1E7D3A]">
-            Published research benchmarks
+            Benchmarks
           </span>
           <span className="ml-2 inline-flex items-center rounded-full border border-[#E2C89E] bg-[#FFF4E5] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#A15C00]">
-            Modeled system estimates
+            System estimates
           </span>
           <span className="ml-2 inline-flex items-center rounded-full border border-[#BDD0FF] bg-[#E8F0FF] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-[#1F4FD8]">
-            Optional telemetry data
+            Simulation data
           </span>
         </p>
         <p className="mt-2 text-[12px] text-[#5E6A5F]">
           Estimated values are derived from published data center energy, cooling,
-          and workload studies. Observed values appear when telemetry is uploaded.
+          and workload studies.
         </p>
       </div>
 
@@ -1356,66 +1356,19 @@ const carbonCardHint = useTelemetry
         <StatusPill tone="sky">{topConfidenceLabel}</StatusPill>
       </div>
 
-      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-2">
-        <Card className="demo-input-shell ds-card--secondary h-fit lg:sticky lg:top-24">
+      <div className="grid grid-cols-1 items-start gap-4 lg:grid-cols-[0.9fr_1.1fr]">
+        <Card className="demo-input-shell ds-card--secondary h-fit">
           <div className="demo-left-shell">
             <div>
               <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-2">
                   <Zap className="text-[#7A7F54]" size={18} />
-                  <div className="font-semibold">Console Input</div>
+                  <div className="font-semibold">Decision Inputs</div>
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2 sm:justify-end">
-                  <button
-                    onClick={runGuidedDemo}
-                    disabled={isGuidedDemoRunning}
-                    className={[
-                      "inline-flex items-center gap-2 rounded-full border px-4 py-2 text-sm transition",
-                      isGuidedDemoRunning
-                        ? "border-[#D3D9D0] bg-[#DDE4DA] text-[#3A3A3A] opacity-70 cursor-not-allowed"
-                        : "border-[#D3D9D0] bg-[#DDE4DA] text-[#262626] hover:bg-[#BFD98A]/45",
-                    ].join(" ")}
-                    type="button"
-                  >
-                    <Play size={16} className="text-[#6B7B48]" />
-                    {isGuidedDemoRunning ? "Running Demo..." : "Run Guided Demo"}
-                  </button>
-
-                  <button
-                    onClick={execute}
-                    className="inline-flex items-center gap-2 rounded-full border border-[#D3D9D0] bg-[#DDE4DA] px-4 py-2 text-sm text-[#262626] transition-colors hover:bg-[#BFD98A]/45"
-                    type="button"
-                  >
-                    <Play size={16} className="text-[#6B7B48]" />
-                    Run
-                  </button>
-
-                  <button
-                    onClick={exportCsv}
-                    className="inline-flex items-center gap-2 rounded-full border border-[#D3D9D0] bg-[#DDE4DA] px-4 py-2 text-sm text-[#262626] transition-colors hover:bg-[#F3F5F0]"
-                    type="button"
-                  >
-                    <FileDown size={16} className="text-[#5E7766]" />
-                    Export CSV
-                  </button>
-                </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-2">
-                <ModuleTag label="Prompt input" />
-                <ModuleTag label="Simulation view" />
-                <span className="demo-signal-chip inline-flex items-center rounded-full border border-[#D3D9D0] bg-[#DDE4DA] px-3 py-1 text-xs text-[#3A3A3A]">
-                  Data:
-                  <span className="ml-1 text-[#6B7B48]">{TRACE_SOURCE_LABEL[traceSource]}</span>
-                </span>
-                <span className="demo-signal-chip inline-flex items-center rounded-full border border-[#D3D9D0] bg-[#DDE4DA] px-3 py-1 text-xs text-[#3A3A3A]">
-                  Mode:
-                  <span className="ml-1 text-[#7A7F54]">{STRATEGY_LABEL[strategy]}</span>
-                </span>
-              </div>
-
-              <div className="demo-policy-trace-card demo-support-surface mt-4 rounded-2xl border border-[#D3D9D0] bg-[#F6F7F3] p-4">
+              <div className="hidden">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-[#262626]">Decision trace</div>
@@ -1481,21 +1434,30 @@ const carbonCardHint = useTelemetry
                 </div>
 
                 <div className="mt-2 text-xs text-[#6F756E]">
-                  Active preset: <span className="text-[#3A3A3A]">{activePreset?.label ?? "—"}</span>
+                  Active preset: <span className="text-[#3A3A3A]">{activePreset?.label ?? "Custom prompt"}</span>
                 </div>
 
                 {/* ── Prompt Schedule Panel ── */}
-                <div className="mt-3 rounded-2xl border border-[#C7CDC5] bg-[#F3F5F0] p-3">
+                <div
+                  className={[
+                    "mt-3 rounded-2xl border p-3",
+                    scheduleEvents.length > 0 || addRowOpen
+                      ? "border-[#C7CDC5] bg-[#F3F5F0]"
+                      : "border-dashed border-[#E2E7DF] bg-[#FBFCFA] py-2",
+                  ].join(" ")}
+                >
                   <div className="flex items-center justify-between gap-2">
                     <div className="text-xs font-semibold uppercase tracking-[0.1em] text-[#5F6B67]">
-                      Prompt Schedule
+                      Schedule
                       {scheduleSource && (
                         <span className="ml-2 rounded-full border border-[#D3D9D0] bg-[#E8ECE6] px-2 py-0.5 text-[10px] text-[#6A776F]">
                           {scheduleSource === "csv" ? "CSV" : "Scenario"}
                         </span>
                       )}
                       <span className="ml-2 text-[#9AA09A] normal-case font-normal">
-                        {scheduleEvents.length} event{scheduleEvents.length !== 1 ? "s" : ""}
+                        {scheduleEvents.length > 0
+                          ? `${scheduleEvents.length} event${scheduleEvents.length !== 1 ? "s" : ""}`
+                          : "Off"}
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
@@ -1652,11 +1614,7 @@ const carbonCardHint = useTelemetry
                         </tbody>
                       </table>
                     </div>
-                  ) : (
-                    <p className="mt-2 text-[11px] text-[#9AA09A]">
-                      No events yet. Select a [CoolSync] scenario, upload a CSV, or add rows manually.
-                    </p>
-                  )}
+                  ) : null}
                 </div>
 
                 {/* ── Schedule CSV Upload ── */}
@@ -1664,7 +1622,7 @@ const carbonCardHint = useTelemetry
                   <label className="flex cursor-pointer items-center gap-2 rounded-2xl border border-dashed border-[#C7CDC5] bg-[#F8FAF8] px-3 py-2 text-xs text-[#6A776F] transition hover:border-[#A8B4A5] hover:bg-[#F3F5F0]">
                     <Upload size={13} className="shrink-0 text-[#7A7F54]" />
                     <span>
-                      Upload Schedule CSV
+                      Upload schedule CSV
                       <span className="ml-1 text-[#9AA09A]">(time_min, prompt, users)</span>
                     </span>
                     <input
@@ -1689,7 +1647,7 @@ const carbonCardHint = useTelemetry
                 />
               </div>
 
-              <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <div className="mt-4">
                 <div className="demo-controls-card demo-support-surface rounded-2xl border border-[#D3D9D0] bg-[#F6F7F3] p-3">
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <SlidersHorizontal size={16} className="text-[#5E7766]" />
@@ -1761,7 +1719,7 @@ const carbonCardHint = useTelemetry
                       </div>
                     </div>
 
-                    <div>
+                    <div className="hidden">
                       <div className="text-xs text-[#6F756E]">Workload flexibility</div>
                       <select
                         value={workloadFlexibility}
@@ -1773,7 +1731,7 @@ const carbonCardHint = useTelemetry
                       </select>
                     </div>
 
-                    <div className="rounded-2xl border border-[#D3D9D0] bg-[#F3F5F0] p-3">
+                    <div className="hidden">
                       <div className="text-xs text-[#6F756E]">System pressure</div>
                       <div className="mt-1 text-sm font-semibold text-[#262626]">
                         {capacityAssessment?.capacityPressure || "LOW"}
@@ -1786,7 +1744,7 @@ const carbonCardHint = useTelemetry
                   </div>
                 </div>
 
-                <div className="demo-support-grid grid grid-cols-2 gap-3">
+                <div className="hidden">
                   <div className="demo-stat-card rounded-2xl border border-[#D3D9D0] bg-[#F6F7F3] p-3">
                     <div className="text-xs text-[#6F756E]">Estimated tokens</div>
                     <div className="mt-1 text-xl font-extrabold text-[#6B7B48]">{tokens}</div>
@@ -1826,7 +1784,7 @@ const carbonCardHint = useTelemetry
                 </div>
               </div>
 
-              <div className="demo-telemetry-card demo-support-surface mt-4 rounded-2xl border border-[#D3D9D0] bg-[#F6F7F3] p-3">
+              <div className="hidden">
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-center gap-2 text-sm font-semibold">
                     <Upload size={16} className="text-[#7A7F54]" />
@@ -1954,7 +1912,7 @@ const carbonCardHint = useTelemetry
                 </div>
               )}
 
-              <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              <div className="mt-4 grid grid-cols-1 gap-3">
                 <KpiCard
                   label={`${valueTypeLabel} energy`}
                   value={
@@ -1985,7 +1943,7 @@ const carbonCardHint = useTelemetry
                   hint={
                     useTelemetry
                       ? "Derived from uploaded telemetry"
-                      : "Cooling share benchmark typically falls in the 30–50% range"
+                      : "Modeled"
                   }
                   badge={useTelemetry ? "Observed" : "Estimated"}
                   accent="teal"
@@ -2040,7 +1998,7 @@ const carbonCardHint = useTelemetry
                 </div>
               )}
 
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="hidden">
                 <div className="demo-result-strip demo-saving-card rounded-2xl border border-[#D3D9D0] bg-[#F6F7F3] p-3">
                   <div className="text-xs text-[#6F756E]">Modeled energy difference</div>
                   <div className="mt-1 text-lg font-bold text-[#8BC34A]">
@@ -2070,7 +2028,7 @@ const carbonCardHint = useTelemetry
             <div>
               <div className="flex flex-wrap items-center gap-2">
                 <Zap className="text-[#5F6B67]" size={18} />
-                <div className="font-semibold">Console Output</div>
+                <div className="font-semibold">Decision Output</div>
 
                 <div className="ml-0 text-xs text-[#6F756E] sm:ml-2">
                   Trace: <span className="text-[#3A3A3A]">{TRACE_SOURCE_LABEL[traceSource]}</span>
@@ -2477,7 +2435,7 @@ const carbonCardHint = useTelemetry
                 </div>
               )}
 
-              <div className="mt-4 rounded-2xl border border-[#C9DCCB] bg-[#F7FAF5] p-4">
+              <div className="hidden">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-[#1F2D22]">Research context</div>
@@ -2501,7 +2459,7 @@ const carbonCardHint = useTelemetry
                 </ul>
               </div>
 
-              <div className="demo-insight-card demo-recommendation-card mt-4 rounded-2xl border border-[rgba(180,105,31,0.22)] bg-[#FFF7EE] p-4 shadow-[0_10px_24px_rgba(180,105,31,0.08)]">
+              <div className="hidden">
                 <div className="text-sm font-bold text-[#8A5923]">&#9888; Recommended</div>
                 <div className="mt-2 text-xs text-[#8A5923]">Recommended action (modeled)</div>
 
@@ -2526,7 +2484,7 @@ const carbonCardHint = useTelemetry
                 </div>
               </div>
 
-              <div className="mt-4 rounded-2xl border border-[#D3D9D0] bg-[#F6F7F3] p-4">
+              <div className="hidden">
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div>
                     <div className="text-sm font-semibold text-[#262626]">Telemetry and calibration</div>
@@ -2555,7 +2513,7 @@ const carbonCardHint = useTelemetry
                 </div>
               </div>
 
-              <div className="limit-box demo-limit-card mt-4 rounded-2xl p-4">
+              <div className="hidden">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div className="limit-title text-sm">Console limits</div>
                   <StatusPill tone="amber">Important note</StatusPill>
@@ -2573,7 +2531,7 @@ const carbonCardHint = useTelemetry
                 </div>
               </div>
 
-              <div className="demo-event-log-card mt-4 rounded-2xl border border-[#D3D9D0] bg-[#F6F7F3] p-4">
+              <div className="hidden">
                 <div className="card-heading text-sm">Event log</div>
                 <div className="card-muted mt-1 text-xs">
                   Recent system activity from the current run or uploaded telemetry.

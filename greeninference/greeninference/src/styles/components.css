@@ -732,11 +732,12 @@
 
 .ds-kpi__value {
   margin-top: var(--space-3);
-  font-size: clamp(1.35rem, 2.2vw, 1.65rem);
+  font-size: 1.45rem;
   line-height: 1.15;
   letter-spacing: var(--tracking-tight);
   font-weight: 800;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ds-kpi__hint {
